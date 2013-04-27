@@ -1,0 +1,37 @@
+#!/usr/bin/env ruby
+require 'pathname'
+require 'erb'
+require 'yaml'
+require 'ostruct'
+
+class Configuration < OpenStruct
+  DEFAULTS = {
+    "username" => 'dev',
+    "password" => 'dev',
+    "public_key_file" => nil
+  }
+
+  def initialize(hash)
+    super DEFAULTS.merge(hash)
+  end
+
+  def public_key
+    Pathname.new(public_key_file).read.chomp if public_key_file
+  end
+
+  def locals
+    binding
+  end
+end
+
+# load config file
+file = Pathname.new("config.yml")
+
+if file.exist?
+  config = Configuration.new YAML.load(file.read)
+else
+  abort "Create a config.yml file"
+end
+
+template = ERB.new Pathname.new("tmpl/user_data_file.erb").read, 0, "<>"
+puts template.result(config.locals)
