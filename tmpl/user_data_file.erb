@@ -33,8 +33,21 @@ apt-get install -y libreadline6-dev zlib1g-dev libssl-dev libyaml-dev libsqlite3
 log 'Installing source control (git)'
 apt-get install -y git-core exuberant-ctags
 
-log 'Installing tmux, zsh, etc'
-apt-get install -y tmux zsh
+log 'Installing zsh'
+apt-get install -y zsh
+
+log 'Installing tmux'
+apt-get build-dep -y tmux
+(
+    cd /tmp
+    git clone https://github.com/ThomasAdam/tmux.git
+    cd tmux
+    git checkout 1.8
+    ./autogen.sh
+    ./configure
+    make
+    make install
+) > /var/log/tmux_build.log
 
 log 'Installing Ruby 1.8'
 apt-get install -y ruby-full
