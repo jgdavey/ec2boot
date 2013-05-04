@@ -1,0 +1,215 @@
+#!/usr/bin/env ruby
+require 'yaml'
+require 'etc'
+require 'pathname'
+require 'fog'
+require 'pry'
+
+began_at = Time.now
+
+username = Etc.getlogin
+pem = Pathname.new File.join(Dir.home(username), '.ec2', 'fog_default.pem')
+
+unless pem.exist?
+  abort "You must create a key pair and put it at #{pem}, and chmod 600"
+end
+
+system "ssh-add #{pem} 2>/dev/null"
+at_exit { system "ssh-add -D 2>/dev/null" }
+
+if Fog.credentials.empty?
+  begin
+    Fog::Errors.missing_credentials
+  rescue Fog::Errors::LoadError => error
+    abort error.message
+  end
+end
+
+servers = Fog::Compute[:aws].servers
+ready_servers = servers.select { |s| s.ready? }
+if ready_servers.any?
+  puts "You already have server(s) spun up"
+  puts ready_servers.map(&:id)
+  puts ready_servers.map(&:dns_name)
+  exit 1
+end
+
+puts "Setting up new server from image"
+server = servers.new(
+  flavor_id: "t1.micro",
+  key_name: "fog_default",
+  image_id: "ami-c30360aa",
+  username: "ubuntu"
+)
+server.save
+
+print "Waiting for server to respond "
+server.wait_for do
+  $stdout.print "."
+  ready?
+end
+puts " done"
+
+print "Waiting for ssh to boot "
+server.wait_for do
+  begin
+    $stdout.print "."
+    sshable?
+  rescue Net::SSH::Disconnect
+  end
+end
+puts " done"
+
+puts "Calibrating the chicken neck"
+server.setup
+
+# MockServer = Struct.new(:foo) do
+#   def ssh(arg)
+#     puts
+#     Array(arg).each do |cmd|
+#       puts cmd
+#     end
+#     puts
+#   end
+# end
+
+# server = MockServer.new
+
+def heredoc_to_array(string)
+  string.gsub(/^\s+/,'').split("\n")
+end
+
+$logfile = File.open("bootlog.log", "w+")
+
+def log(strings)
+  Array(strings).each do |lines|
+    $logfile.write lines
+  end
+end
+
+puts "Installing packages"
+
+apt_packages = %w(
+  autoconf make automake pkg-config
+  exuberant-ctags
+  git-core
+  libffi-dev
+  libgdbm-dev
+  libncurses5-dev
+  libreadline6-dev
+  libsqlite3-dev sqlite3
+  libtool bison
+  libxml2-dev libxslt1-dev
+  node
+  postgresql postgresql-client libpq-dev
+  ruby-full
+  zlib1g-dev libssl-dev libyaml-dev
+  zsh
+)
+
+apt_commands = heredoc_to_array <<-BASH
+  sudo apt-get update
+  sudo sed -r -i 's/universe$/universe multiverse/g' /etc/apt/sources.list
+  sudo apt-get update
+BASH
+
+apt_commands << "sudo apt-get install -y " + apt_packages.join(" ")
+result = server.ssh apt_commands
+log(result.map(&:stdout))
+
+puts "Setting up tmux"
+
+tmux_setup = heredoc_to_array <<-BASH
+  sudo apt-get build-dep -y tmux
+  cd /tmp
+  git clone https://github.com/ThomasAdam/tmux.git
+  cd tmux
+  git checkout 1.8
+  ./autogen.sh
+  ./configure
+  make
+  sudo make install
+BASH
+
+result = server.ssh tmux_setup.join("; ")
+log(result.map(&:stdout))
+
+# Create "dev" user
+user = "dev"
+homefolder = "/home/#{user}"
+keyfile="#{homefolder}/.ssh/authorized_keys"
+password = "password"
+public_key = Pathname.new File.join(Dir.home(username), '.ssh', 'id_rsa.pub')
+
+user_commands = heredoc_to_array <<-BASH
+  sudo -u postgres createuser -s #{user}
+  sudo useradd #{user} -m -s /bin/zsh -G sudo,adm,dialout,cdrom,audio,dip,video,plugdev,admin
+BASH
+
+if password
+  puts "Using password #{password}"
+  user_commands << heredoc_to_array(<<-BASH).join("; ")
+  echo '#{user}:#{password}' | sudo chpasswd
+  sudo sed -r -i 's/^(PasswordAuthentication\s*)no/\\1yes/' /etc/ssh/sshd_config
+  sudo reload ssh
+  BASH
+end
+
+if public_key.exist?
+  puts "Using public key #{public_key}"
+  user_commands << heredoc_to_array(<<-BASH).join(" && ")
+  sudo -u #{user} mkdir -p "#{homefolder}/.ssh"
+  sudo -u #{user} touch #{keyfile}
+  sudo chown #{user}:#{user} #{keyfile}
+  echo '#{public_key.read.chomp}' | sudo -u #{user} tee #{keyfile}
+  sudo -u #{user} chmod 600  #{keyfile}
+  BASH
+end
+
+result = server.ssh user_commands
+log(result.map(&:stdout))
+
+# Setup RVM
+result = server.ssh "cd /tmp && curl -L https://get.rvm.io | sudo -i -u #{user} bash -s stable"
+log(result.map(&:stdout))
+
+# MOTD
+server.ssh [<<-BASH, "sudo mv /tmp/motd /etc/"]
+cat <<'EOF' > /tmp/motd
+
+    OMG, hi there!!1! This machine should be all set for a great pairing
+    session. Don't forget to terminate this instance when you're done.
+
+    Have fun! <3 <3 <3
+
+EOF
+BASH
+
+# Password-less sudo
+server.ssh [<<-BASH, "sudo sh -c 'cat /tmp/new_sudoers >> /etc/sudoers'"]
+cat <<'EOF' > /tmp/new_sudoers
+
+# Enable password-less sudo for all users in the "sudo" group
+%sudo ALL=NOPASSWD: ALL
+
+EOF
+BASH
+
+workspace = Pathname.pwd + "workspace.sh"
+if workspace.exist?
+  puts "Setting up #{user}'s workspace from file #{workspace}"
+  server.scp workspace.to_s, "/tmp/workspace.sh"
+  ssh_options = password ? {:password => password } : {}
+  ssh = Fog::SSH.new(server.public_ip_address, user, ssh_options)
+  ssh.run("cd ~ && bash /tmp/workspace.sh")
+end
+
+
+puts "Your instance is ready"
+puts "Log in with one of:"
+puts "  ssh #{user}@#{server.dns_name}"
+puts "  ssh #{user}@#{server.public_ip_address}"
+
+$logfile.close
+
+puts "Finished in #{Time.now - began_at} seconds"
