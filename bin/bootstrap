@@ -38,7 +38,7 @@ puts "Setting up new server from image"
 server = servers.new(
   flavor_id: "t1.micro",
   key_name: "fog_default",
-  image_id: "ami-c30360aa",
+  image_id: "ami-0cdf4965",
   username: "ubuntu"
 )
 server.save

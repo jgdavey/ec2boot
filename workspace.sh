@@ -39,8 +39,8 @@ bin/install
 cd $HOME
 
 # Default Ruby
-rvm install 1.9.3
-rvm use --default 1.9.3
+rvm install 1.9.3-p392
+rvm use --default 1.9.3-p392
 
 # A bunch of vim plugins
 ~/hashrocket/dotmatrix/bin/vimbundles.sh
