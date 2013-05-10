@@ -32,25 +32,21 @@ so something like this works:
       :aws_access_key_id: [KEY_ID]
       :aws_secret_access_key: [ACCESS_KEY]
 
+### Default EC2 security group
+
+You'll want to make sure that your default security group has SSH turned on.
+
 ## Usage
 
-1. Create a config.yml in the project directory
-2. Run the generator
+To kick things off, run:
 
-        bin/generate > user-data.sh
+    $ bin/bootstrap
 
-3. Use the generated file to launch and ec2 instance
+This will launch and bootstrap a server for you and then spit out the ssh
+command to run that'll attach you to that configured server.
 
-        ec2-run-instances --key $EC2_KEY -t m1.small -f user-data.sh <IMAGE>
+### Watching the progress
 
-4. Once the instance is ready, run the workspace script for the "dev" user (or whatever username you used).
+If you're interested in more than just dots, try tailing the bootlog:
 
-        ssh dev@really-long-ec2-hostname-12-123-123-413.amazonaws.com 'bash -s' < workspace.sh
-
-Before step 4, you can optionally watch progress. It usually takes 5-10
-minutes for the instance to boot and the script to complete. The last
-line of the file will read "DONE" when the script is complete.
-
-    ssh -i ~/.ec2/$EC2_KEY.pem ubuntu@really-long-ip.amazonaws.com 'tail -f /var/log/bootstrap_out.log'
-
-Note: replace the argument to `-i` with the path to your ec2 pem file.
+    $ tail -f bootlog.log
