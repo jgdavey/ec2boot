@@ -57,5 +57,9 @@ cd $HOME
 rvm install 1.9.3-p392
 rvm use --default 1.9.3-p392
 
+touch $HOME/.gemrc
+echo "install: --no-ri --no-rdoc" >> $HOME/.gemrc
+echo "update: --no-ri --no-rdoc" >> $HOME/.gemrc
+
 # A bunch of vim plugins
 ~/hashrocket/dotmatrix/bin/vimbundles.sh
