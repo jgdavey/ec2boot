@@ -38,6 +38,21 @@ bin/install
 
 cd $HOME
 
+# HR
+
+cd hashrocket
+
+if [ ! -d hr ]; then
+    git clone git://github.com/hashrocket/hr
+fi
+
+cd hr
+./bin/hr init
+
+echo 'eval "$(/home/dev/hashrocket/hr/bin/hr init -)"' >> $HOME/.zshrc.local
+
+cd $HOME
+
 # Default Ruby
 rvm install 1.9.3-p392
 rvm use --default 1.9.3-p392
