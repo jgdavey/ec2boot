@@ -209,6 +209,9 @@ puts "Your instance is ready"
 puts "Log in with one of:"
 puts "  ssh #{user}@#{server.dns_name}"
 puts "  ssh #{user}@#{server.public_ip_address}"
+puts "For a Rails project, you might want to forward ports - try this:"
+puts "  ssh -L 3000:*:3000 #{user}@#{server.dns_name}"
+puts "Now you'll be able to look at the server's Rails app just like you look at your local one!"
 
 $logfile.close
 
