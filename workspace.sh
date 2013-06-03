@@ -54,8 +54,8 @@ echo 'eval "$(/home/dev/hashrocket/hr/bin/hr init -)"' >> $HOME/.zshrc.local
 cd $HOME
 
 # Default Ruby
-rvm install 1.9.3-p392
-rvm use --default 1.9.3-p392
+rvm install 1.9.3
+rvm use --default 1.9.3
 
 touch $HOME/.gemrc
 echo "install: --no-ri --no-rdoc" >> $HOME/.gemrc
