@@ -50,3 +50,9 @@ command to run that'll attach you to that configured server.
 If you're interested in more than just dots, try tailing the bootlog:
 
     $ tail -f bootlog.log
+
+### Using the existing image
+
+If you just want to use an exisiting image, run this:
+
+    $ bin/pairup

@@ -1,0 +1,73 @@
+#!/usr/bin/env ruby
+require 'yaml'
+require 'etc'
+require 'pathname'
+require 'fog'
+require 'pry'
+
+began_at = Time.now
+
+username = Etc.getlogin
+pem = Pathname.new File.join(Dir.home(username), '.ec2', 'fog_default.pem')
+
+unless pem.exist?
+  abort "You must create a key pair and put it at #{pem}, and chmod 600"
+end
+
+system "ssh-add #{pem} 2>/dev/null"
+at_exit { system "ssh-add -D 2>/dev/null" }
+
+if Fog.credentials.empty?
+  begin
+    Fog::Errors.missing_credentials
+  rescue Fog::Errors::LoadError => error
+    abort error.message
+  end
+end
+
+servers = Fog::Compute[:aws].servers
+ready_servers = servers.select { |s| s.ready? }
+if ready_servers.any?
+  puts "You already have server(s) spun up"
+  puts ready_servers.map(&:id)
+  puts ready_servers.map(&:dns_name)
+  exit 1
+end
+
+puts "Setting up new server from image"
+server = servers.new(
+  flavor_id: "t1.micro",
+  key_name: "fog_default",
+  image_id: "ami-57a7d03e",
+  username: "ubuntu"
+)
+server.save
+
+print "Waiting for server to respond "
+server.wait_for do
+  $stdout.print "."
+  ready?
+end
+puts " done"
+
+print "Waiting for ssh to boot "
+server.wait_for do
+  begin
+    $stdout.print "."
+    sshable?
+  rescue Net::SSH::Disconnect
+  end
+end
+puts " done"
+
+puts "Calibrating the chicken neck"
+server.setup
+
+puts "Your instance is ready"
+puts "Log in with one of:"
+puts "  ssh dev@#{server.dns_name}"
+puts "  ssh dev@#{server.public_ip_address}"
+puts "For a Rails project, you might want to forward ports - try this:"
+puts "  ssh -L 3000:*:3000 dev@#{server.dns_name}"
+
+puts "Finished in #{Time.now - began_at} seconds"
